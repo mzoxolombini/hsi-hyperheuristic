@@ -1,0 +1,48 @@
+4. Usage & Reproduction Instructions
+4.1 Quick Start: Reproduce Thesis Results
+
+# 1. Download datasets (see Section 3.1)
+
+# 2. Start Docker container
+docker run --gpus all -it -v $(pwd)/data:/data -v $(pwd)/results:/results hsi-hyperheuristic:v1.0
+
+# 3. Execute full validation
+python hh_hed.py --mode full_validation --dataset Indian_Pines --n_runs 10
+
+# 4. Generate report
+python hh_hed.py --mode generate_report --results_path /results/evaluation_results.json
+
+4.2 Command-Line Interface
+usage: hh_hed.py [--mode MODE] [--dataset DATASET] [--n_runs N] [--help]
+
+Modes:
+  full_validation    Run complete training + evaluation (n=10 runs)
+  train_only         Execute only GP evolution + policy training
+  evaluate_only      Run evaluation on pre-trained framework
+  baseline           Compare against static baselines (3D-CNN, U-Net, ViT)
+  generate_report    Create PDF report from results
+  readme             Print this README
+
+Datasets:
+  Indian_Pines, Pavia_University, Salinas, Houston, Botswana
+
+4.3 Python API Example
+from hh_hed import HyperHeuristicFramework, Config, HyperspectralDataset
+
+# Initialize
+config = Config()
+framework = HyperHeuristicFramework(config)
+
+# Load data
+train_data = HyperspectralDataset(config, dataset_name="Indian_Pines", mode="train")
+val_data = HyperspectralDataset(config, dataset_name="Indian_Pines", mode="val")
+
+# Train
+framework.train(train_data, val_data)
+
+# Segment new image
+segmentation_result = framework.segment(test_image, mode="adaptive")
+print(f"mIoU: {segmentation_result['miou']:.4f}")
+
+# Save state
+framework.save_state("framework_state.json")
