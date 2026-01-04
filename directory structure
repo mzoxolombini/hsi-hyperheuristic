@@ -1,0 +1,23 @@
+./workspace/
+├── hh_hed.py                    # Main code
+├── requirements.txt
+├── Dockerfile
+├── data/
+│   ├── Indian_Pines/
+│   │   ├── indian_pines_corrected.mat
+│   │   └── indian_pines_gt.mat
+│   ├── Pavia_University/
+│   │   ├── paviaU.mat
+│   │   └── paviaU_gt.mat
+│   ├── Salinas/
+│   │   ├── salinas_corrected.mat
+│   │   └── salinas_gt.mat
+│   ├── Houston/
+│   └── Botswana/
+├── results/
+│   ├── hardware_config.json
+│   ├── evolution_results.json
+│   ├── evaluation_results.json
+│   ├── pareato_frontier.png
+│   └── framework_final_state.json
+└── cache/                       # For checksums and intermediate results
