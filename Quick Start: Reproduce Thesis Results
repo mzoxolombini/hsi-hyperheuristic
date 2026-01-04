@@ -1,9 +1,0 @@
-# 1. Download datasets (see Section 3.1)
-# 2. Start Docker container
-docker run --gpus all -it -v $(pwd)/data:/data -v $(pwd)/results:/results hsi-hyperheuristic:v1.0
-
-# 3. Execute full validation
-python hh_hed.py --mode full_validation --dataset Indian_Pines --n_runs 10
-
-# 4. Generate report
-python hh_hed.py --mode generate_report --results_path /results/evaluation_results.json
