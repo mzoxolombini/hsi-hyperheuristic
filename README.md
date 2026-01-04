@@ -1,4 +1,3 @@
-Below is a clean, GitHub-ready Markdown version of your README. Content is preserved. Structure is standardized for research repositories. You can copy this directly into README.md.
 
 ---
 
@@ -240,37 +239,15 @@ Generated in `./results/`:
 
 ---
 
-## 8. Citation
-
-```bibtex
-@phdthesis{mbini2024optimisation,
-  title={Optimisation of Computation Intelligence Techniques for Image Segmentation},
-  author={Mbini, Mzoxolo},
-  year={2024},
-  school={University of Pretoria},
-  doi={10.5281/zenodo.1234567}
-}
-```
-
-License: Apache 2.0
-
----
-
-## 9. Contact
+## 8. Contact
 
 **Author:** Mzoxolo Mbini
-Email: [mzoxolo.mbini@up.ac.za](mailto:mzoxolo.mbini@up.ac.za)
+Email: [u16350244@tuks.co.za](mailto:u16350244@tuks.co.za)
 Institution: University of Pretoria
 
 ---
 
-## 10. Ethical Use
-
-Prohibited uses include military targeting, surveillance without consent, medical deployment without approval, and biometric tracking.
-
----
-
-## 11. Version History
+## 9. Version History
 
 * v1.0 (2024-02-15): Thesis-aligned release
 * v1.01: Multi-modal fusion
@@ -279,7 +256,7 @@ Prohibited uses include military targeting, surveillance without consent, medica
 
 ---
 
-## 12. Architecture Overview
+## 10. Architecture Overview
 
 ```text
 Hyperspectral Input
@@ -293,7 +270,7 @@ Hyperspectral Input
 
 ---
 
-## 13. Acknowledgments
+## 11. Acknowledgments
 
 Supported by the University of Pretoria, NRF South Africa, CHPC, and NVIDIA Academic Program.
 
