@@ -270,12 +270,6 @@ Hyperspectral Input
 
 ---
 
-## 11. Acknowledgments
-
-Supported by the University of Pretoria, NRF South Africa, CHPC, and NVIDIA Academic Program.
-
----
-
 Last updated: 2024-02-15
 Version: 1.0
 DOI: 10.5281/zenodo.1234567
