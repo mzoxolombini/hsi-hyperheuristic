@@ -1,0 +1,74 @@
+hsi-hyperheuristic/
+├── README.md
+├── requirements.txt
+├── setup.py
+├── Dockerfile
+├── config.json
+├── run.py                    # Main CLI entry point
+├── data/                     # Datasets (auto-downloaded)
+├── src/
+│   ├── __init__.py
+│   ├── config/               # Configuration management
+│   │   ├── __init__.py
+│   │   ├── config_loader.py
+│   │   ├── constants.py
+│   │   └── hyperparameters.py
+│   ├── data/                 # Data handling
+│   │   ├── __init__.py
+│   │   ├── dataset_loader.py
+│   │   ├── preprocessing.py
+│   │   ├── augmentations.py
+│   │   └── meta_features.py
+│   ├── llhs/                 # Low-Level Heuristics
+│   │   ├── __init__.py
+│   │   ├── base.py
+│   │   ├── sspso.py
+│   │   ├── gradient_ops.py
+│   │   ├── clustering.py
+│   │   ├── watershed.py
+│   │   ├── mrf.py
+│   │   ├── cnn_refine.py
+│   │   └── crf.py
+│   ├── gp/                   # Genetic Programming
+│   │   ├── __init__.py
+│   │   ├── grammar.py
+│   │   ├── individual.py
+│   │   ├── evolution.py
+│   │   ├── evaluation.py
+│   │   └── pareto_front.py
+│   ├── policy/               # Policy Network
+│   │   ├── __init__.py
+│   │   ├── network.py
+│   │   ├── trainer.py
+│   │   └── selector.py
+│   ├── framework/            # Main framework
+│   │   ├── __init__.py
+│   │   ├── hyperheuristic.py
+│   │   ├── trainer.py
+│   │   ├── evaluator.py
+│   │   └── segmenter.py
+│   ├── utils/                # Utilities
+│   │   ├── __init__.py
+│   │   ├── reproducibility.py
+│   │   ├── stats.py
+│   │   ├── visualization.py
+│   │   ├── metrics.py
+│   │   ├── logger.py
+│   │   └── profiler.py
+│   └── experiments/          # Experiment scripts
+│       ├── __init__.py
+│       ├── run_experiment.py
+│       └── baseline_comparison.py
+├── scripts/                  # Shell scripts
+│   ├── download_datasets.sh
+│   ├── run_docker.sh
+│   └── run_experiments.sh
+├── tests/                    # Unit tests
+│   ├── __init__.py
+│   ├── test_data.py
+│   ├── test_llhs.py
+│   └── test_framework.py
+├── notebooks/                # Jupyter notebooks
+│   ├── 01_data_exploration.ipynb
+│   └── 02_results_analysis.ipynb
+└── results/                  # Output directory (auto-created)
