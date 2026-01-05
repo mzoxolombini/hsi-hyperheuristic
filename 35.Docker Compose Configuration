@@ -1,0 +1,45 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  hsi-hyperheuristic:
+    build: .
+    container_name: hsi-hyperheuristic
+    runtime: nvidia  # For GPU support
+    volumes:
+      - ./data:/workspace/data
+      - ./results:/workspace/results
+      - ./logs:/workspace/logs
+      - ./checkpoints:/workspace/checkpoints
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0,1,2,3
+    ports:
+      - "8888:8888"  # Jupyter
+      - "6006:6006"  # TensorBoard
+    command: >
+      bash -c "
+      python scripts/download_datasets.sh &&
+      python run.py full --dataset Indian_Pines --n_runs 5
+      "
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  jupyter:
+    build: .
+    container_name: hsi-jupyter
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/workspace/notebooks
+      - ./data:/workspace/data
+    command: >
+      bash -c "
+      jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser 
+      --allow-root --NotebookApp.token='' --NotebookApp.password=''
+      "
