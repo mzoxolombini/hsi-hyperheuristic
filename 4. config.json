@@ -1,0 +1,100 @@
+{
+  "framework": {
+    "name": "HyperHeuristic_HSI_Segmentation",
+    "version": "1.0.0",
+    "mode": "full_validation",
+    "random_seed": 42,
+    "n_runs": 10,
+    "measure_energy": true,
+    "enable_profiling": true,
+    "log_level": "INFO"
+  },
+  
+  "paths": {
+    "data_dir": "./data",
+    "results_dir": "./results",
+    "cache_dir": "./cache",
+    "logs_dir": "./logs",
+    "checkpoints_dir": "./checkpoints"
+  },
+  
+  "datasets": {
+    "Indian_Pines": {
+      "url": "https://www.ehu.eus/ccwintco/uploads/6/67/Indian_pines_corrected.mat",
+      "gt_url": "https://www.ehu.eus/ccwintco/uploads/c/c4/Indian_pines_gt.mat",
+      "height": 145,
+      "width": 145,
+      "bands": 200,
+      "classes": 16,
+      "bad_bands": [[0, 4], [103, 113], [148, 166], [217, 220]]
+    },
+    "Pavia_University": {
+      "url": "https://www.ehu.eus/ccwintco/uploads/e/ee/PaviaU.mat",
+      "gt_url": "https://www.ehu.eus/ccwintco/uploads/5/50/PaviaU_gt.mat",
+      "height": 610,
+      "width": 340,
+      "bands": 103,
+      "classes": 9
+    }
+  },
+  
+  "preprocessing": {
+    "patch_size": 64,
+    "stride": 32,
+    "train_patches": 2000,
+    "test_patches": 500,
+    "augmentation_prob": 0.5,
+    "denoising_method": "bm3d",
+    "dimensionality_reduction": "pca",
+    "variance_threshold": 0.997
+  },
+  
+  "gp": {
+    "population_size": 100,
+    "generations": 50,
+    "crossover_rate": 0.9,
+    "mutation_rate": 0.3,
+    "elitism": 5,
+    "tournament_size": 7,
+    "max_depth": 6,
+    "objectives": ["accuracy", "efficiency", "complexity"],
+    "weights": [0.6, 0.3, 0.1]
+  },
+  
+  "pso": {
+    "population": 50,
+    "iterations": 200,
+    "inertia_base": 0.9,
+    "inertia_min": 0.4,
+    "cognitive": 1.5,
+    "social": 1.5,
+    "spatial_weight": 1.0,
+    "variants": ["fast", "accurate", "spatial", "spectral"]
+  },
+  
+  "policy": {
+    "hidden_dims": [64, 32],
+    "dropout": 0.2,
+    "learning_rate": 0.001,
+    "epochs": 50,
+    "batch_size": 32,
+    "weight_decay": 0.0001,
+    "entropy_coef": 0.1
+  },
+  
+  "evaluation": {
+    "metrics": ["mIoU", "OverallAccuracy", "Kappa", "F1_Score", "Precision", "Recall"],
+    "confidence_level": 0.95,
+    "n_bootstrap": 10000,
+    "test_size": 0.2,
+    "val_size": 0.1
+  },
+  
+  "hardware": {
+    "gpu_ids": [0],
+    "num_workers": 4,
+    "pin_memory": true,
+    "mixed_precision": true,
+    "cudnn_benchmark": true
+  }
+}
