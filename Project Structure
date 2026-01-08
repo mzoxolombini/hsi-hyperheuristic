@@ -6,6 +6,7 @@ hsi-hyperheuristic/
 ├── config.json
 ├── run.py                    # Main CLI entry point
 ├── data/                     # Datasets (auto-downloaded)
+├── checkpoints/              # Model checkpoints (e.g., gradient_v6.2.pt)
 ├── src/
 │   ├── __init__.py
 │   ├── config/               # Configuration management
@@ -23,7 +24,7 @@ hsi-hyperheuristic/
 │   │   ├── __init__.py
 │   │   ├── base.py
 │   │   ├── sspso.py
-│   │   ├── gradient_ops.py
+│   │   ├── gradient.py          # HolisticGradientOperator
 │   │   ├── clustering.py
 │   │   ├── watershed.py
 │   │   ├── mrf.py
@@ -41,7 +42,15 @@ hsi-hyperheuristic/
 │   │   ├── network.py
 │   │   ├── trainer.py
 │   │   └── selector.py
-│   ├── framework/            # Main framework
+│   ├── transfer/             # Transfer Learning Components (NEW)
+│   │   ├── __init__.py
+│   │   ├── adapter.py        # GradientTransferAdapter
+│   │   └── task_losses.py    # Task-specific loss functions
+│   ├── deployment/           # Edge Deployment Orchestration (NEW)
+│   │   ├── __init__.py
+│   │   ├── orchestrator.py   # EdgeOrchestrator for resource management
+│   │   └── modality_router.py
+│   ├── framework/            # Main Hyper-Heuristic Framework
 │   │   ├── __init__.py
 │   │   ├── hyperheuristic.py
 │   │   ├── trainer.py
@@ -55,20 +64,23 @@ hsi-hyperheuristic/
 │   │   ├── metrics.py
 │   │   ├── logger.py
 │   │   └── profiler.py
-│   └── experiments/          # Experiment scripts
+│   └── experiments/          # Experiment Scripts
 │       ├── __init__.py
 │       ├── run_experiment.py
 │       └── baseline_comparison.py
-├── scripts/                  # Shell scripts
+├── scripts/                  # Shell and CLI Scripts
 │   ├── download_datasets.sh
 │   ├── run_docker.sh
-│   └── run_experiments.sh
-├── tests/                    # Unit tests
+│   ├── run_experiments.sh
+│   └── adapt_to_domain.py    # CLI for Transfer Learning (NEW)
+├── tests/                    # Unit Tests
 │   ├── __init__.py
 │   ├── test_data.py
 │   ├── test_llhs.py
+│   ├── test_transfer.py      # Transfer Adapter Tests (NEW)
 │   └── test_framework.py
-├── notebooks/                # Jupyter notebooks
+├── notebooks/                # Jupyter Notebooks
 │   ├── 01_data_exploration.ipynb
-│   └── 02_results_analysis.ipynb
-└── results/                  # Output directory (auto-created)
+│   ├── 02_results_analysis.ipynb
+│   └── 03_transfer_learning.ipynb  # Demo Notebook (NEW)
+└── results/                  # Output Directory (Auto-Created)
