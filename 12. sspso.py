@@ -1,404 +1,324 @@
 """
-SS-PSO LLH module
-Execution Order: 14
+Spectral-Spatial Particle Swarm Optimization (SS-PSO)
+Implements Chapter 6 with Theorem 6.3.1 convergence guarantee
 """
 
+import torch
+import torch.nn as nn
 import numpy as np
-from scipy import spatial
-from typing import Dict, List, Tuple, Optional, Any
-import logging
-from dataclasses import dataclass, field
-
-from .base import BaseLLH, register_llh
-
-logger = logging.getLogger(__name__)
+from typing import Optional, Tuple, Dict, Any
+from .base import BaseLLH
 
 
-@dataclass
-class SSPSOConfig:
-    """SS-PSO configuration"""
-    n_particles: int = 50
-    max_iterations: int = 200
-    inertia_base: float = 0.9
-    inertia_min: float = 0.4
-    cognitive_weight: float = 1.5
-    social_weight: float = 1.5
-    spatial_weight: float = 1.0
-    variant: str = "accurate"  # "fast", "accurate", "spatial", "spectral"
-    n_clusters: int = 16
-    convergence_tol: float = 1e-6
-    verbose: bool = False
-
-
-@register_llh("ss_pso_fast")
-@register_llh("ss_pso_accurate")
-@register_llh("ss_pso_spatial")
-@register_llh("ss_pso_spectral")
-class SpectralSpatialPSO(BaseLLH):
+class SSPSO(BaseLLH):
     """
-    Spectral-Spatial PSO for hyperspectral clustering
+    Spectral-Spatial Particle Swarm Optimization with convergence guarantees.
     
-    Implements SS-PSO with convergence guarantees and
-    spatial regularization (Theorem 6.3.1)
+    Theorem 6.3.1: The system converges if c3 < (1 - ω) / 2
     """
     
-    def __init__(self, name: str, config: Dict[str, Any]):
-        super().__init__(name, config)
+    def __init__(
+        self,
+        n_particles: int = 50,
+        n_iterations: int = 200,
+        n_clusters: int = 9,
+        omega: float = 0.5,
+        c1: float = 1.5,
+        c2: float = 1.5,
+        c3: float = 0.1,
+        spatial_weight: float = 1.0,
+        topology_size: int = 5,
+        use_meta_conditioning: bool = True,
+        device: str = 'cuda'
+    ):
+        """
+        Args:
+            n_particles: Number of particles in swarm
+            n_iterations: Maximum iterations
+            n_clusters: Number of output clusters/classes
+            omega: Inertia weight (must be in [0,1])
+            c1: Cognitive coefficient
+            c2: Social coefficient  
+            c3: Spatial regularization coefficient (must satisfy convergence bound)
+            spatial_weight: λ weight for spatial regularization term L_spat
+            topology_size: k for k×k communication neighbourhood
+            use_meta_conditioning: Enable meta-feature conditioned parameters
+            device: Computation device
+        """
+        super().__init__()
+        self.n_particles = n_particles
+        self.n_iterations = n_iterations
+        self.n_clusters = n_clusters
+        self.omega = omega
+        self.c1 = c1
+        self.c2 = c2
+        self.c3 = c3
+        self.spatial_weight = spatial_weight
+        self.topology_size = topology_size
+        self.use_meta_conditioning = use_meta_conditioning
+        self.device = device
         
-        # Parse configuration
-        self.sspso_config = SSPSOConfig(**config)
+        # Enforce Theorem 6.3.1 convergence bound
+        self._enforce_convergence_bound()
         
-        # Set variant-specific parameters
-        self._set_variant_parameters()
-        
-        # State variables
+        # Particle state
         self.particles = None
         self.velocities = None
         self.personal_best = None
-        self.personal_best_fitness = None
         self.global_best = None
-        self.global_best_fitness = None
+        self.personal_best_fitness = None
         
-        self.supports_meta_features = True
-        self.requires_training = False
-        
-        logger.info(f"Initialized SS-PSO LLH: {name}, variant: {self.sspso_config.variant}")
+    def _enforce_convergence_bound(self):
+        """Enforce Theorem 6.3.1: c3 < (1 - ω) / 2"""
+        max_c3 = (1 - self.omega) / 2 - 1e-6  # Subtract epsilon for numerical stability
+        if self.c3 >= max_c3:
+            original = self.c3
+            self.c3 = max(0.01, max_c3)
+            import warnings
+            warnings.warn(
+                f"c3={original} exceeds convergence bound {max_c3}. "
+                f"Clipped to {self.c3}. See Theorem 6.3.1."
+            )
     
-    def _set_variant_parameters(self) -> None:
-        """Set parameters based on variant"""
-        variant_params = {
-            "fast": (20, 50, 0.5),      # particles, iterations, spatial_weight
-            "accurate": (100, 300, 1.0),
-            "spatial": (50, 200, 2.0),
-            "spectral": (50, 200, 0.1)
-        }
-        
-        if self.sspso_config.variant in variant_params:
-            n_particles, max_iter, spatial_weight = variant_params[self.sspso_config.variant]
-            self.sspso_config.n_particles = n_particles
-            self.sspso_config.max_iterations = max_iter
-            self.sspso_config.spatial_weight = spatial_weight
-    
-    def apply(self, data: np.ndarray, **kwargs) -> np.ndarray:
+    def _compute_spatial_gradient(
+        self, 
+        centroids: torch.Tensor, 
+        data: torch.Tensor,
+        spatial_positions: torch.Tensor
+    ) -> torch.Tensor:
         """
-        Apply SS-PSO clustering
+        Compute spatial regularization gradient ∇_f L_spat.
+        
+        L_spat = Σ_{i,j∈N} exp(-||p_i - p_j||²/2σ²) * I[l_i ≠ l_j]
         
         Args:
-            data: Input data [H, W, B] or [N, B]
-            **kwargs: Additional parameters
-                - n_clusters: Number of clusters (optional)
-                - meta_features: Meta-features for conditioning (optional)
-                
-        Returns:
-            Segmentation labels
+            centroids: Current cluster centroids (n_clusters, n_features)
+            data: Input data points (n_points, n_features)
+            spatial_positions: Spatial coordinates (n_points, 2)
         """
-        if not self.validate_input(data):
-            return np.zeros(data.shape[:2], dtype=np.int32)
+        n_points = data.shape[0]
+        n_features = data.shape[1]
         
-        # Extract parameters
-        n_clusters = kwargs.get('n_clusters', self.sspso_config.n_clusters)
-        meta_features = kwargs.get('meta_features', None)
+        # Compute pairwise spatial distances
+        spatial_diff = spatial_positions.unsqueeze(1) - spatial_positions.unsqueeze(0)
+        spatial_dist2 = (spatial_diff ** 2).sum(dim=2)
         
-        # Condition parameters on meta-features
-        if meta_features is not None:
-            self.condition_on_meta_features(meta_features)
+        # Gaussian kernel for spatial proximity
+        sigma = 0.1
+        spatial_weight = torch.exp(-spatial_dist2 / (2 * sigma ** 2))
         
-        # Reshape if 3D
-        if data.ndim == 3:
-            h, w, b = data.shape
-            data_2d = data.reshape(-1, b)
-            return_3d = True
-        else:
-            data_2d = data
-            return_3d = False
+        # Compute spectral distances to centroids
+        spectral_dist = torch.cdist(data, centroids)
+        labels = spectral_dist.argmin(dim=1)
         
-        # Run SS-PSO optimization
-        centroids, labels = self._optimize(data_2d, n_clusters)
+        # Penalize label discontinuities between spatially close points
+        label_diff = (labels.unsqueeze(1) != labels.unsqueeze(0)).float()
         
-        # Reshape back if needed
-        if return_3d:
-            labels = labels.reshape(h, w)
+        # L_spat gradient approximation
+        L_spat = (spatial_weight * label_diff).sum()
+        
+        # Approximate gradient using finite differences
+        grad = torch.zeros_like(centroids)
+        eps = 1e-4
+        
+        for k in range(self.n_clusters):
+            for d in range(n_features):
+                centroids_plus = centroids.clone()
+                centroids_plus[k, d] += eps
+                centroids_minus = centroids.clone()
+                centroids_minus[k, d] -= eps
+                
+                # Recompute labels with perturbed centroids
+                dist_plus = torch.cdist(data, centroids_plus)
+                labels_plus = dist_plus.argmin(dim=1)
+                dist_minus = torch.cdist(data, centroids_minus)
+                labels_minus = dist_minus.argmin(dim=1)
+                
+                label_diff_plus = (labels_plus.unsqueeze(1) != labels_plus.unsqueeze(0)).float()
+                label_diff_minus = (labels_minus.unsqueeze(1) != labels_minus.unsqueeze(0)).float()
+                
+                L_plus = (spatial_weight * label_diff_plus).sum()
+                L_minus = (spatial_weight * label_diff_minus).sum()
+                
+                grad[k, d] = (L_plus - L_minus) / (2 * eps)
+        
+        return self.spatial_weight * grad
+    
+    def _fitness(self, centroids: torch.Tensor, data: torch.Tensor) -> torch.Tensor:
+        """Compute fitness (negative intra-cluster distance)."""
+        distances = torch.cdist(data, centroids)
+        min_distances = distances.min(dim=1)[0]
+        return -min_distances.mean()
+    
+    def forward(
+        self, 
+        x: torch.Tensor, 
+        spatial_coords: Optional[torch.Tensor] = None,
+        meta_features: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        """
+        Execute SS-PSO optimization.
+        
+        Args:
+            x: Input features (H*W, n_features)
+            spatial_coords: Spatial coordinates (H*W, 2)
+            meta_features: Meta-features for conditioning (optional)
+            
+        Returns:
+            labels: Cluster assignments (H*W,)
+        """
+        n_points, n_features = x.shape
+        
+        if spatial_coords is None:
+            # Create grid coordinates
+            h = int(np.sqrt(n_points))
+            w = h
+            grid_y, grid_x = torch.meshgrid(
+                torch.linspace(0, 1, h, device=x.device),
+                torch.linspace(0, 1, w, device=x.device),
+                indexing='ij'
+            )
+            spatial_coords = torch.stack([grid_x.flatten(), grid_y.flatten()], dim=1)
+        
+        # Apply meta-feature conditioning if enabled
+        if self.use_meta_conditioning and meta_features is not None:
+            self._apply_meta_conditioning(meta_features)
+        
+        # Initialize particles
+        self._initialize_particles(n_features, x.device)
+        
+        # Main optimization loop
+        for iteration in range(self.n_iterations):
+            for i in range(self.n_particles):
+                # Compute fitness
+                fitness = self._fitness(self.particles[i], x)
+                
+                # Update personal best
+                if fitness > self.personal_best_fitness[i]:
+                    self.personal_best_fitness[i] = fitness
+                    self.personal_best[i] = self.particles[i].clone()
+                
+                # Update global best (local topology-aware)
+                self._update_topology_best(i)
+            
+            # Update velocities and positions
+            for i in range(self.n_particles):
+                # Cognitive component
+                cognitive = self.c1 * torch.rand_like(self.particles[i]) * (
+                    self.personal_best[i] - self.particles[i]
+                )
+                
+                # Social component
+                social = self.c2 * torch.rand_like(self.particles[i]) * (
+                    self.global_best - self.particles[i]
+                )
+                
+                # Spatial regularization component
+                spatial_grad = self._compute_spatial_gradient(
+                    self.particles[i], x, spatial_coords
+                )
+                spatial_force = self.c3 * spatial_grad
+                
+                # Velocity update (Eq. 6.2)
+                self.velocities[i] = (
+                    self.omega * self.velocities[i] + 
+                    cognitive + social + spatial_force
+                )
+                
+                # Position update
+                self.particles[i] = self.particles[i] + self.velocities[i]
+                
+                # Clamp positions to valid range [0, 1]
+                self.particles[i] = torch.clamp(self.particles[i], 0, 1)
+        
+        # Final segmentation using best global solution
+        distances = torch.cdist(x, self.global_best)
+        labels = distances.argmin(dim=1)
         
         return labels
     
-    def _optimize(self, data: np.ndarray, n_clusters: int) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        SS-PSO optimization with spatial regularization
-        
-        Args:
-            data: Input data [N, B]
-            n_clusters: Number of clusters
-            
-        Returns:
-            Tuple of (centroids, labels)
-        """
-        n_samples, n_features = data.shape
-        
-        # Initialize particles
-        self._initialize_particles(data, n_clusters, n_features)
-        
-        # Optimization loop
-        for iteration in range(self.sspso_config.max_iterations):
-            # Adaptive inertia weight
-            inertia = self._adaptive_inertia(iteration)
-            
-            # Evaluate fitness and update best positions
-            self._evaluate_and_update(data, n_clusters)
-            
-            # Check convergence
-            if self._check_convergence():
-                logger.debug(f"SS-PSO converged at iteration {iteration}")
-                break
-            
-            # Update velocities and positions
-            self._update_velocities_and_positions(inertia, data, n_clusters, iteration)
-            
-            # Log progress
-            if self.sspso_config.verbose and (iteration + 1) % 50 == 0:
-                logger.debug(f"Iteration {iteration + 1}: "
-                           f"Best fitness = {self.global_best_fitness:.4f}")
-        
-        # Final clustering
-        distances = spatial.distance.cdist(data, self.global_best, 'euclidean')
-        labels = np.argmin(distances, axis=1)
-        
-        return self.global_best, labels
-    
-    def _initialize_particles(self, data: np.ndarray, n_clusters: int, n_features: int) -> None:
-        """Initialize particles and velocities"""
-        # Initialize particles using k-means++ initialization
-        from sklearn.cluster import KMeans
-        
-        self.particles = np.zeros((self.sspso_config.n_particles, n_clusters, n_features))
-        self.velocities = np.random.randn(*self.particles.shape) * 0.1
-        
-        # Initialize first particle with k-means++ centers
-        kmeans = KMeans(
-            n_clusters=n_clusters,
-            init='k-means++',
-            n_init=1,
-            random_state=42
+    def _initialize_particles(self, n_features: int, device: torch.device):
+        """Initialize swarm with random centroids."""
+        self.particles = torch.rand(
+            self.n_particles, self.n_clusters, n_features, device=device
         )
-        kmeans.fit(data)
-        self.particles[0] = kmeans.cluster_centers_
-        
-        # Initialize remaining particles with random perturbations
-        for i in range(1, self.sspso_config.n_particles):
-            self.particles[i] = self.particles[0] + np.random.randn(n_clusters, n_features) * 0.5
-        
-        # Initialize best positions
-        self.personal_best = self.particles.copy()
-        self.personal_best_fitness = np.full(self.sspso_config.n_particles, -np.inf)
-        self.global_best = self.particles[0].copy()
-        self.global_best_fitness = -np.inf
+        self.velocities = torch.zeros_like(self.particles)
+        self.personal_best = self.particles.clone()
+        self.personal_best_fitness = torch.full(
+            (self.n_particles,), -float('inf'), device=device
+        )
+        self.global_best = self.particles[0].clone()
     
-    def _adaptive_inertia(self, iteration: int) -> float:
-        """Calculate adaptive inertia weight"""
-        # Linearly decreasing inertia
-        inertia_range = self.sspso_config.inertia_base - self.sspso_config.inertia_min
-        inertia = self.sspso_config.inertia_base - (inertia_range * iteration / self.sspso_config.max_iterations)
-        return max(inertia, self.sspso_config.inertia_min)
+    def _update_topology_best(self, particle_idx: int):
+        """Update local best based on k×k topology (Section 6.3.3)."""
+        # Simplified: use global best for now
+        # Full implementation would use spatial neighborhoods
+        if self.personal_best_fitness[particle_idx] > self._get_global_best_fitness():
+            self.global_best = self.personal_best[particle_idx].clone()
     
-    def _evaluate_and_update(self, data: np.ndarray, n_clusters: int) -> None:
-        """Evaluate fitness and update best positions"""
-        for i in range(self.sspso_config.n_particles):
-            fitness = self._calculate_fitness(data, self.particles[i], n_clusters)
-            
-            # Update personal best
-            if fitness > self.personal_best_fitness[i]:
-                self.personal_best[i] = self.particles[i].copy()
-                self.personal_best_fitness[i] = fitness
-            
-            # Update global best
-            if fitness > self.global_best_fitness:
-                self.global_best = self.particles[i].copy()
-                self.global_best_fitness = fitness
+    def _get_global_best_fitness(self) -> torch.Tensor:
+        """Get current global best fitness."""
+        return self.personal_best_fitness.max()
     
-    def _calculate_fitness(self, data: np.ndarray, centroids: np.ndarray, n_clusters: int) -> float:
+    def _apply_meta_conditioning(self, meta_features: torch.Tensor):
         """
-        Calculate fitness: -J + λ·𝓁_spat
+        Apply meta-feature conditioned parameters (Section 6.4.2).
         
-        J: Reconstruction error
-        𝓁_spat: Spatial regularization term
-        λ: Spatial weight
+        Uses neural network to predict ω, c1, c2, c3 from meta-features.
         """
-        # Assign points to clusters
-        distances = spatial.distance.cdist(data, centroids, 'euclidean')
-        labels = np.argmin(distances, axis=1)
+        # This is a simplified version
+        # Full implementation would use the MLP from Section 7.5.2
         
-        # Reconstruction error
-        reconstruction_error = 0.0
-        for k in range(n_clusters):
-            cluster_points = data[labels == k]
-            if len(cluster_points) > 0:
-                error = np.sum(np.linalg.norm(cluster_points - centroids[k], axis=1) ** 2)
-                reconstruction_error += error
+        # Scale parameters based on meta-features
+        complexity = meta_features[0, 0].item()  # D_f
+        noise = meta_features[0, 2].item()  # SNR
         
-        # Spatial regularization (if data has spatial structure)
-        spatial_reg = self._spatial_regularization(labels, data.shape[0])
+        # Adapt omega: lower inertia for complex regions
+        self.omega = 0.9 - 0.4 * complexity
         
-        # Fitness = negative total cost
-        total_cost = reconstruction_error + self.sspso_config.spatial_weight * spatial_reg
-        return -total_cost
+        # Adapt c3: stronger spatial regularization for complex regions
+        self.c3 = 0.25 * complexity
+        
+        # Re-enforce convergence bound
+        self._enforce_convergence_bound()
     
-    def _spatial_regularization(self, labels: np.ndarray, n_samples: int) -> float:
-        """
-        Spatial regularization term 𝓁_spat
-        
-        Args:
-            labels: Cluster labels
-            n_samples: Number of samples
-            
-        Returns:
-            Spatial regularization loss
-        """
-        # Check if data can be arranged in a grid
-        grid_size = int(np.sqrt(n_samples))
-        if grid_size ** 2 != n_samples:
-            return 0.0  # No spatial regularization for non-grid data
-        
-        # Arrange labels in grid
-        label_grid = labels.reshape(grid_size, grid_size)
-        
-        # Calculate spatial discontinuities
-        spatial_loss = 0.0
-        
-        for i in range(grid_size):
-            for j in range(grid_size):
-                current_label = label_grid[i, j]
-                
-                # Check 4-connected neighbors
-                for di, dj in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                    ni, nj = i + di, j + dj
-                    if 0 <= ni < grid_size and 0 <= nj < grid_size:
-                        if label_grid[ni, nj] != current_label:
-                            spatial_loss += 1.0
-        
-        return spatial_loss
-    
-    def _check_convergence(self) -> bool:
-        """Check convergence criteria"""
-        if self.global_best_fitness == -np.inf:
-            return False
-        
-        # Check if fitness hasn't improved significantly
-        recent_fitness = self.personal_best_fitness[:10]  # Last 10 personal bests
-        if len(recent_fitness) >= 10:
-            improvement = np.max(recent_fitness) - np.min(recent_fitness)
-            if improvement < self.sspso_config.convergence_tol:
-                return True
-        
-        return False
-    
-    def _update_velocities_and_positions(self, inertia: float, data: np.ndarray,
-                                        n_clusters: int, iteration: int) -> None:
-        """Update velocities and positions"""
-        for i in range(self.sspso_config.n_particles):
-            # Cognitive component
-            r1 = np.random.rand()
-            cognitive = (self.sspso_config.cognitive_weight * r1 * 
-                        (self.personal_best[i] - self.particles[i]))
-            
-            # Social component
-            r2 = np.random.rand()
-            social = (self.sspso_config.social_weight * r2 * 
-                     (self.global_best - self.particles[i]))
-            
-            # Spatial regularization gradient
-            spatial_grad = self._spatial_gradient(data, self.particles[i], n_clusters)
-            
-            # Apply convergence constraint
-            max_spatial_coeff = (1 - self.sspso_config.inertia_min) / 2
-            spatial_coeff = min(self.sspso_config.spatial_weight, max_spatial_coeff)
-            
-            # Velocity update
-            self.velocities[i] = (
-                inertia * self.velocities[i] +
-                cognitive +
-                social +
-                spatial_coeff * spatial_grad
-            )
-            
-            # Position update
-            self.particles[i] += self.velocities[i]
-            
-            # Boundary handling
-            self._handle_boundaries(self.particles[i])
-    
-    def _spatial_gradient(self, data: np.ndarray, centroids: np.ndarray, n_clusters: int) -> np.ndarray:
-        """Numerical gradient of spatial regularization term"""
-        epsilon = 1e-6
-        
-        # Random perturbation
-        perturbation = np.random.randn(*centroids.shape) * epsilon
-        
-        # Current loss
-        current_loss = self._spatial_regularization_for_centroids(data, centroids, n_clusters)
-        
-        # Perturbed loss
-        perturbed_centroids = centroids + epsilon * perturbation
-        perturbed_loss = self._spatial_regularization_for_centroids(data, perturbed_centroids, n_clusters)
-        
-        # Numerical gradient
-        gradient = (perturbed_loss - current_loss) / epsilon * perturbation
-        
-        return gradient
-    
-    def _spatial_regularization_for_centroids(self, data: np.ndarray, centroids: np.ndarray,
-                                             n_clusters: int) -> float:
-        """Compute spatial loss for given centroids"""
-        distances = spatial.distance.cdist(data, centroids, 'euclidean')
-        labels = np.argmin(distances, axis=1)
-        return self._spatial_regularization(labels, len(data))
-    
-    def _handle_boundaries(self, centroids: np.ndarray) -> None:
-        """Handle boundary conditions for centroids"""
-        # Clip to reasonable range
-        np.clip(centroids, -10.0, 10.0, out=centroids)
-    
-    def condition_on_meta_features(self, meta_features: Dict[str, float]) -> None:
-        """Condition parameters on meta-features"""
-        complexity = meta_features.get('fractal_dimension', 1.5)
-        
-        # Adjust parameters based on complexity
-        if complexity > 1.5:
-            # Complex regions: more exploration
-            self.sspso_config.spatial_weight = min(1.5, self.sspso_config.spatial_weight * 1.2)
-            self.sspso_config.cognitive_weight = 1.8
-            self.sspso_config.social_weight = 1.8
-        elif complexity < 1.2:
-            # Simple regions: more exploitation
-            self.sspso_config.spatial_weight = max(0.5, self.sspso_config.spatial_weight * 0.8)
-            self.sspso_config.cognitive_weight = 1.2
-            self.sspso_config.social_weight = 1.2
-        
-        # Enforce convergence constraint
-        max_spatial_coeff = (1 - self.sspso_config.inertia_min) / 2
-        if self.sspso_config.spatial_weight > max_spatial_coeff:
-            self.sspso_config.spatial_weight = max_spatial_coeff
-    
-    def get_parameters(self) -> Dict[str, Any]:
-        """Get current parameters"""
-        return self.sspso_config.__dict__
-    
-    def set_parameters(self, params: Dict[str, Any]) -> None:
-        """Set parameters"""
-        for key, value in params.items():
-            if hasattr(self.sspso_config, key):
-                setattr(self.sspso_config, key, value)
-    
-    def get_complexity(self) -> float:
-        """Get computational complexity estimate"""
-        # O(n_particles * max_iterations * n_samples * n_clusters * n_features)
-        base_complexity = 1.0
-        
-        # Adjust based on variant
-        variant_complexity = {
-            "fast": 0.3,
-            "accurate": 2.0,
-            "spatial": 1.2,
-            "spectral": 1.2
+    def get_config(self) -> Dict[str, Any]:
+        """Return configuration for serialization."""
+        return {
+            'name': 'SS-PSO',
+            'n_particles': self.n_particles,
+            'n_iterations': self.n_iterations,
+            'n_clusters': self.n_clusters,
+            'omega': self.omega,
+            'c1': self.c1,
+            'c2': self.c2,
+            'c3': self.c3,
+            'spatial_weight': self.spatial_weight,
+            'topology_size': self.topology_size,
+            'use_meta_conditioning': self.use_meta_conditioning
         }
-        
-        multiplier = variant_complexity.get(self.sspso_config.variant, 1.0)
-        return base_complexity * multiplier
+
+
+# Specialist variants (Table 4.1)
+class SSPSOFast(SSPSO):
+    """Fast variant: 20 particles, 50 iterations"""
+    def __init__(self, **kwargs):
+        super().__init__(n_particles=20, n_iterations=50, **kwargs)
+
+
+class SSPSOAccurate(SSPSO):
+    """Accurate variant: 100 particles, 300 iterations"""
+    def __init__(self, **kwargs):
+        super().__init__(n_particles=100, n_iterations=300, **kwargs)
+
+
+class SSPSOSpatial(SSPSO):
+    """Spatial variant: high spatial regularization (λ = 2.0)"""
+    def __init__(self, **kwargs):
+        super().__init__(spatial_weight=2.0, **kwargs)
+
+
+class SSPSOSpectral(SSPSO):
+    """Spectral variant: pure spectral clustering (λ = 0.1)"""
+    def __init__(self, **kwargs):
+        super().__init__(spatial_weight=0.1, **kwargs)
