@@ -1,0 +1,313 @@
+# Appendix C: Complete Hyperparameter Settings for All Experiments
+# This file contains all hyperparameters used in the thesis experiments
+
+version: "1.0"
+date: "2024-02-15"
+
+# C.1 Hyper-Heuristic Evolution Parameters
+evolution:
+  population_size: 100
+  generations: 50
+  crossover_rate: 0.9
+  mutation_rate: 0.3
+  tournament_size: 7
+  elite_preservation: 5
+  grammar_version: "v6.2"
+  max_depth: 6
+  initialization_method: "ramped_half_and_half"
+  
+  # Termination criteria
+  termination:
+    max_generations: 50
+    convergence_threshold: 0.001
+    stagnation_limit: 10
+
+# C.2 SS-PSO Hyperparameters
+sspso:
+  # Default values
+  default:
+    particles: 50
+    iterations: 200
+    omega: 0.5
+    c1: 1.5
+    c2: 1.5
+    spatial_neighbourhood: 5
+    mrf_weight: 1.0
+    spatial_bandwidth: 0.1
+  
+  # Dataset-specific (Table C.2)
+  datasets:
+    indian_pines:
+      particles: 50
+      iterations: 200
+      omega: 0.5
+      c1: 1.5
+      c2: 1.5
+      spatial_neighbourhood: 5
+      mrf_weight: 1.0
+      spatial_bandwidth: 0.1
+    
+    pavia_university:
+      particles: 50
+      iterations: 200
+      omega: 0.5
+      c1: 1.5
+      c2: 1.5
+      spatial_neighbourhood: 5
+      mrf_weight: 0.3
+      spatial_bandwidth: 0.15
+    
+    salinas_valley:
+      particles: 50
+      iterations: 200
+      omega: 0.5
+      c1: 1.5
+      c2: 1.5
+      spatial_neighbourhood: 5
+      mrf_weight: 0.8
+      spatial_bandwidth: 0.12
+    
+    houston:
+      particles: 50
+      iterations: 200
+      omega: 0.5
+      c1: 1.5
+      c2: 1.5
+      spatial_neighbourhood: 5
+      mrf_weight: 1.2
+      spatial_bandwidth: 0.09
+    
+    botswana:
+      particles: 50
+      iterations: 200
+      omega: 0.5
+      c1: 1.5
+      c2: 1.5
+      spatial_neighbourhood: 5
+      mrf_weight: 2.0
+      spatial_bandwidth: 0.08
+
+# C.2.2 Meta-Feature Conditioned Parameters
+meta_feature_network:
+  input_dim: 12
+  hidden_layers: [32, 16]
+  activations: ["ReLU", "ReLU"]
+  dropout: [0.2, 0.1]
+  output_dim: 4  # omega, c1, c2, c3
+  final_constraint: "c3 <= (1 - omega) / 2"
+  
+  training:
+    optimizer: "Adam"
+    learning_rate: 0.001
+    weight_decay: 0.00001
+    batch_size: 64
+    epochs: 50
+    early_stopping_patience: 10
+    loss_function: "MSE + L2_regularization"
+    regularization_weight: 0.001
+
+# C.3 Holistic Gradient Operator Parameters
+holistic_gradient:
+  # Multi-scale Gaussian derivative filters (Table C.3)
+  scales:
+    fine:
+      sigma_lambda: 1.0
+      sigma_spatial: 0.8
+      purpose: "Narrow absorption features"
+    
+    medium:
+      sigma_lambda: 3.0
+      sigma_spatial: 1.5
+      purpose: "Material transitions"
+    
+    coarse:
+      sigma_lambda: 7.0
+      sigma_spatial: 2.5
+      purpose: "Broad spectral trends"
+  
+  # Complexity-guided scale selection thresholds
+  scale_selection:
+    complex_threshold: 1.5  # D_f > 1.5 -> use all scales
+    simple_threshold: 1.2   # D_f < 1.2 -> use only coarse scale
+
+# C.3.2 Weight Prediction MLP
+weight_mlp:
+  architecture:
+    input_dim: 12
+    hidden_dim: 24
+    output_dim: 3  # alpha, beta, gamma
+    activation: "ReLU"
+    dropout: 0.15
+  
+  training:
+    optimizer: "Adam"
+    learning_rate: 0.001
+    weight_decay: 0.00001
+    batch_size: 32
+    epochs: 50
+    loss: "MSE"
+    validation_split: 0.2
+  
+  optimal_weights:
+    indian_pines: [0.45, 0.35, 0.20]
+    pavia_university: [0.50, 0.30, 0.20]
+    salinas_valley: [0.40, 0.40, 0.20]
+
+# C.4 Baseline Method Parameters
+baselines:
+  3d_cnn:
+    kernel_size: [3, 3, 7]
+    filters: [16, 32, 64]
+    dropout: 0.3
+    optimizer: "SGD"
+    learning_rate: 0.01
+    momentum: 0.9
+    batch_size: 16
+    epochs: 200
+    weight_decay: 0.0005
+  
+  unet:
+    architecture:
+      filters: [64, 128, 256, 512]
+      bottleneck: 1024
+      skip_connections: true
+    optimizer: "Adam"
+    learning_rate: 0.0001
+    batch_size: 8
+    epochs: 150
+    weight_decay: 0.0001
+  
+  vision_transformer:
+    patch_size: [8, 8]
+    embed_dim: 768
+    num_heads: 12
+    depth: 12
+    mlp_ratio: 4
+    dropout: 0.1
+    optimizer: "AdamW"
+    learning_rate: 0.0001
+    weight_decay: 0.01
+    batch_size: 4
+    epochs: 100
+    warmup_epochs: 10
+  
+  canonical_pso:
+    omega_start: 0.9
+    omega_end: 0.4
+    omega_decay: "linear"
+    c1: 2.0
+    c2: 2.0
+    particles: 50
+    max_iterations: 200
+  
+  genetic_algorithm:
+    population: 50
+    generations: 200
+    crossover_type: "uniform"
+    crossover_rate: 0.8
+    mutation_type: "gaussian"
+    mutation_rate: 0.1
+    selection_type: "tournament"
+    tournament_size: 5
+    elitism: 2
+  
+  kmeans_plusplus:
+    n_init: 10
+    max_iter: 300
+    tol: 0.0001
+  
+  fcm_s:
+    fuzziness: 2.0
+    max_iter: 200
+    tol: 0.0001
+    spatial_weight: 0.5
+  
+  watershed:
+    marker_source: "gradient"
+    compactness: 0.5
+    watershed_line: true
+
+# C.5 Hardware and Software Configuration
+hardware:
+  cpu:
+    model: "AMD EPYC 7763"
+    cores: 64
+    frequency: "2.45 GHz"
+  
+  gpu:
+    model: "NVIDIA A100-SXM4"
+    count: 4
+    vram: "40 GB HBM2"
+    interconnect: "NVLink 3.0"
+  
+  ram:
+    size: "512 GB"
+    type: "DDR4-3200"
+  
+  storage:
+    data: "2 TB NVMe SSD"
+    archive: "10 TB NAS"
+  
+  operating_system:
+    name: "Ubuntu"
+    version: "20.04 LTS"
+  
+  software:
+    python: "3.8.12"
+    pytorch: "1.12.1"
+    cuda: "11.3"
+    ray: "2.0.0"
+    numpy: "1.23.1"
+    scikit_learn: "1.1.2"
+
+# C.6 Energy Measurement Protocol
+energy_measurement:
+  tool: "nvidia-smi"
+  sampling_interval: 1  # seconds
+  warmup_images: 100
+  measurement_images: 900
+  
+  power_consumption:
+    idle_per_gpu: 45  # Watts
+    active_per_gpu: 285  # Watts (average during inference)
+  
+  energy_per_image:
+    hyper_heuristic: 0.142  # kJ
+    unet_retraining: 0.784  # kJ
+    cnn_3d_inference: 1.042  # kJ
+  
+  # Derived metrics
+  efficiency:
+    hyper_heuristic: 381  # mIoU/kJ
+    unet_retraining: 54   # mIoU/kJ
+    improvement_factor: 7.1
+
+# Random seeds for reproducibility
+random_seeds:
+  main: 42
+  numpy: 42
+  torch: 42
+  python: 42
+  cuda: 42
+
+# Experiment configuration
+experiments:
+  n_runs: 10
+  bootstrap_resamples: 10000
+  significance_level: 0.05
+  bonferroni_correction: true
+  
+  datasets:
+    - "Indian_Pines"
+    - "Pavia_University"
+    - "Salinas_Valley"
+    - "Houston"
+    - "Botswana"
+  
+  metrics:
+    - "mIoU"
+    - "OA"
+    - "SAM_error"
+    - "boundary_recall"
+    - "inference_time"
+    - "energy_consumption"
