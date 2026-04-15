@@ -10,9 +10,9 @@ Research-grade implementation of the hyper-heuristic framework described in:
 **Optimisation of Computation Intelligence Techniques for Image Segmentation**
 PhD Thesis, University of Pretoria, 2024
 
-**Author:** Adapted from Mzoxolo Mbini’s PhD thesis
+**Author:** Mzoxolo Mbini
 **Version:** 1.0 (Research Validation)
-**DOI:** [PLACEHOLDER - update before submission] (reserve at https://zenodo.org before publishing)
+**DOI:** [PLACEHOLDER - update before submission]
 
 ---
 
