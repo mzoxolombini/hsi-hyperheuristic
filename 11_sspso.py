@@ -45,7 +45,7 @@ class SSPSO(BaseLLH):
             use_meta_conditioning: Enable meta-feature conditioned parameters
             device: Computation device
         """
-        super().__init__()
+        super().__init__(name="SS-PSO", config={})
         self.n_particles = n_particles
         self.n_iterations = n_iterations
         self.n_clusters = n_clusters
@@ -297,6 +297,24 @@ class SSPSO(BaseLLH):
             'topology_size': self.topology_size,
             'use_meta_conditioning': self.use_meta_conditioning
         }
+
+    def apply(self, data: np.ndarray, **kwargs) -> np.ndarray:
+        """Apply SS-PSO segmentation to data [H, W, B]."""
+        h, w, b = data.shape
+        x = torch.FloatTensor(data.reshape(-1, b)).to(self.device)
+        labels = self.forward(x, **kwargs)
+        return labels.cpu().numpy().reshape(h, w)
+
+    def get_parameters(self) -> Dict[str, Any]:
+        """Get current LLH parameters."""
+        return self.get_config()
+
+    def set_parameters(self, params: Dict[str, Any]) -> None:
+        """Set LLH parameters and re-enforce convergence bound."""
+        for key, value in params.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+        self._enforce_convergence_bound()
 
 
 # Specialist variants (Table 4.1)

@@ -117,20 +117,11 @@ class Preprocessor:
             return self._savgol_denoise(data)
     
     def _savgol_denoise(self, data: np.ndarray) -> np.ndarray:
-        """Savitzky-Golay spectral smoothing"""
+        """Savitzky-Golay spectral smoothing (vectorized)"""
         h, w, b = data.shape
-        denoised = np.zeros_like(data)
-        
-        for i in range(h):
-            for j in range(w):
-                spectrum = data[i, j, :]
-                denoised[i, j, :] = savgol_filter(
-                    spectrum,
-                    window_length=7,
-                    polyorder=3
-                )
-        
-        return denoised
+        reshaped = data.reshape(-1, b)
+        denoised = savgol_filter(reshaped, window_length=7, polyorder=3, axis=1)
+        return denoised.reshape(h, w, b)
     
     def _wavelet_denoise(self, data: np.ndarray) -> np.ndarray:
         """Wavelet-based denoising"""
@@ -222,7 +213,7 @@ class Preprocessor:
         h, w, b = data.shape
         reshaped = data.reshape(-1, b)
         
-        if mode == "train" or self.fitted_pca is None:
+        if mode == "train":
             # Determine number of components for variance threshold
             pca_temp = PCA()
             pca_temp.fit(reshaped)
@@ -235,17 +226,22 @@ class Preprocessor:
             self.fitted_pca.fit(reshaped)
             logger.info(f"PCA fitted with {n_components} components "
                        f"({self.config.variance_threshold*100:.1f}% variance)")
-        
-        # Transform data
-        reduced = self.fitted_pca.transform(reshaped).reshape(h, w, -1)
-        return reduced
+            reduced = self.fitted_pca.transform(reshaped).reshape(h, w, -1)
+            return reduced
+        elif self.fitted_pca is not None:
+            reduced = self.fitted_pca.transform(reshaped).reshape(h, w, -1)
+            return reduced
+        else:
+            raise RuntimeError(
+                "PCA not fitted. Call process() with mode='train' before processing val/test data."
+            )
     
     def _ica_reduction(self, data: np.ndarray, mode: str) -> np.ndarray:
         """ICA dimensionality reduction"""
         h, w, b = data.shape
         reshaped = data.reshape(-1, b)
         
-        if mode == "train" or self.fitted_ica is None:
+        if mode == "train":
             n_components = min(30, b // 2)
             self.fitted_ica = FastICA(
                 n_components=n_components,
@@ -254,9 +250,15 @@ class Preprocessor:
             )
             self.fitted_ica.fit(reshaped)
             logger.info(f"ICA fitted with {n_components} components")
-        
-        reduced = self.fitted_ica.transform(reshaped).reshape(h, w, -1)
-        return reduced
+            reduced = self.fitted_ica.transform(reshaped).reshape(h, w, -1)
+            return reduced
+        elif self.fitted_ica is not None:
+            reduced = self.fitted_ica.transform(reshaped).reshape(h, w, -1)
+            return reduced
+        else:
+            raise RuntimeError(
+                "ICA not fitted. Call process() with mode='train' before processing val/test data."
+            )
     
     def _mfa_reduction(self, data: np.ndarray, mode: str) -> np.ndarray:
         """Minimum Noise Fraction (MNF) approximation"""

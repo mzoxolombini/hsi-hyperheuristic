@@ -12,7 +12,7 @@ PhD Thesis, University of Pretoria, 2024
 
 **Author:** Adapted from Mzoxolo Mbini’s PhD thesis
 **Version:** 1.0 (Research Validation)
-**DOI:** 10.5281/zenodo.1234567 (to be minted upon publication)
+**DOI:** [PLACEHOLDER - update before submission] (reserve at https://zenodo.org before publishing)
 
 ---
 
@@ -235,6 +235,7 @@ Generated in `./results/`:
 * Ubuntu 20.04, CUDA 11.3
 * Python 3.8.12
 * Random seed = 42
+* Set PYTHONHASHSEED=42 in shell BEFORE launching Python (e.g., `export PYTHONHASHSEED=42`)
 * All datasets verified by checksum
 
 ---
@@ -272,4 +273,4 @@ Hyperspectral Input
 
 Last updated: 2024-02-15
 Version: 1.0
-DOI: 10.5281/zenodo.1234567
+DOI: [PLACEHOLDER - update before submission]

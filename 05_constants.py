@@ -54,7 +54,7 @@ GRAMMAR_RULES = {
     'S': ['Preprocess Segment Postprocess'],
     'Preprocess': ['PCA', 'ICA', 'Denoise', 'Normalize', 'None'],
     'Segment': ['SS_PSO', 'KMeans', 'SpectralClustering', 'Watershed', 'Gradient', 'FCM'],
-    'Postprocess': ['MRF', 'CNN_Refine', 'Morphology', 'CRF', 'None']
+    'Postprocess': ['MRF', 'Morphology', 'None']
 }
 
 # Terminal parameters

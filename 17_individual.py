@@ -9,6 +9,7 @@ import random
 import hashlib
 import json
 import logging
+import numpy as np
 
 logger = logging.getLogger(__name__)
 

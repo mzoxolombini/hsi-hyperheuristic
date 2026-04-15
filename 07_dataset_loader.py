@@ -179,10 +179,14 @@ class HSIDataset(Dataset):
         
         # Limit number of patches based on mode
         if self.mode == "train" and len(patches) > self.preprocessor.config.train_patches:
+            # Reproducibility note: this relies on NumPy global seed being set
+            # by ReproducibilityManager before HSIDataset initialization.
             indices = np.random.choice(len(patches), self.preprocessor.config.train_patches, replace=False)
             patches = [patches[i] for i in indices]
             coords = [coords[i] for i in indices]
         elif self.mode in ["val", "test"] and len(patches) > self.preprocessor.config.test_patches:
+            # Reproducibility note: this relies on NumPy global seed being set
+            # by ReproducibilityManager before HSIDataset initialization.
             indices = np.random.choice(len(patches), self.preprocessor.config.test_patches, replace=False)
             patches = [patches[i] for i in indices]
             coords = [coords[i] for i in indices]
