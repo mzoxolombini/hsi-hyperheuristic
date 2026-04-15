@@ -418,7 +418,8 @@ class StatisticalValidator:
     def calculate_bayesian_factor(self, method1_scores: List[float],
                                 method2_scores: List[float]) -> Dict[str, Any]:
         """
-        Calculate Bayesian factor for hypothesis testing
+        Calculate Bayes Factor approximation for hypothesis testing
+        (Kass & Raftery, 1995 approximation via BIC).
         
         Args:
             method1_scores: Scores from method 1
@@ -427,66 +428,53 @@ class StatisticalValidator:
         Returns:
             Bayesian analysis results
         """
-        try:
-            from bayesian_optimization import BayesFactor
-            
-            # Simplified Bayesian factor calculation
-            # In practice, use a proper Bayesian model
-            
-            n1, n2 = len(method1_scores), len(method2_scores)
-            
-            if n1 < 2 or n2 < 2:
-                return {'bayes_factor': 1.0, 'evidence': 'Insufficient data'}
-            
-            # Calculate means and pooled variance
-            mean1, var1 = np.mean(method1_scores), np.var(method1_scores)
-            mean2, var2 = np.mean(method2_scores), np.var(method2_scores)
-            pooled_var = ((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2)
-            
-            # Simplified Bayes factor (Kass & Raftery, 1995)
-            t_stat = (mean1 - mean2) / np.sqrt(pooled_var * (1/n1 + 1/n2))
-            df = n1 + n2 - 2
-            
-            # Bayes factor approximation
-            bayes_factor = np.sqrt((n1 + n2) / (n1 * n2)) * \
-                          (1 + t_stat**2 / df) ** (-(df + 1) / 2)
-            
-            # Interpret evidence
-            if bayes_factor > 100:
-                evidence = "Extreme evidence for H1"
-            elif bayes_factor > 30:
-                evidence = "Very strong evidence for H1"
-            elif bayes_factor > 10:
-                evidence = "Strong evidence for H1"
-            elif bayes_factor > 3:
-                evidence = "Moderate evidence for H1"
-            elif bayes_factor > 1:
-                evidence = "Anecdotal evidence for H1"
-            elif bayes_factor > 1/3:
-                evidence = "Anecdotal evidence for H0"
-            elif bayes_factor > 1/10:
-                evidence = "Moderate evidence for H0"
-            elif bayes_factor > 1/30:
-                evidence = "Strong evidence for H0"
-            elif bayes_factor > 1/100:
-                evidence = "Very strong evidence for H0"
-            else:
-                evidence = "Extreme evidence for H0"
-            
-            result = {
-                'bayes_factor': float(bayes_factor),
-                'evidence': evidence,
-                'log_bayes_factor': float(np.log(bayes_factor)),
-                't_statistic': float(t_stat),
-                'degrees_freedom': int(df),
-                'n1': n1,
-                'n2': n2
-            }
-            
-            logger.info(f"Bayesian factor: BF={bayes_factor:.4f}, evidence={evidence}")
-            
-            return result
-            
-        except ImportError:
-            logger.warning("Bayesian optimization package not available")
-            return {'bayes_factor': 1.0, 'evidence': 'Calculation not available'}
+        n1, n2 = len(method1_scores), len(method2_scores)
+
+        if n1 < 2 or n2 < 2:
+            return {'bayes_factor': 1.0, 'evidence': 'Insufficient data'}
+
+        mean1, var1 = np.mean(method1_scores), np.var(method1_scores, ddof=1)
+        mean2, var2 = np.mean(method2_scores), np.var(method2_scores, ddof=1)
+        pooled_var = ((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2)
+
+        t_stat = (mean1 - mean2) / np.sqrt(pooled_var * (1/n1 + 1/n2) + 1e-10)
+        df = n1 + n2 - 2
+
+        # BIC-based Bayes factor approximation (Wagenmakers, 2007)
+        bayes_factor = np.exp(0.5 * (t_stat**2 - np.log(n1 + n2)))
+        bayes_factor = float(np.clip(bayes_factor, 1e-10, 1e10))
+
+        # Interpret evidence (Jeffreys scale)
+        if bayes_factor > 100:
+            evidence = "Extreme evidence for H1"
+        elif bayes_factor > 30:
+            evidence = "Very strong evidence for H1"
+        elif bayes_factor > 10:
+            evidence = "Strong evidence for H1"
+        elif bayes_factor > 3:
+            evidence = "Moderate evidence for H1"
+        elif bayes_factor > 1:
+            evidence = "Anecdotal evidence for H1"
+        elif bayes_factor > 1/3:
+            evidence = "Anecdotal evidence for H0"
+        elif bayes_factor > 1/10:
+            evidence = "Moderate evidence for H0"
+        elif bayes_factor > 1/30:
+            evidence = "Strong evidence for H0"
+        elif bayes_factor > 1/100:
+            evidence = "Very strong evidence for H0"
+        else:
+            evidence = "Extreme evidence for H0"
+
+        result = {
+            'bayes_factor': bayes_factor,
+            'evidence': evidence,
+            'log_bayes_factor': float(np.log(bayes_factor + 1e-10)),
+            't_statistic': float(t_stat),
+            'degrees_freedom': int(df),
+            'n1': n1,
+            'n2': n2
+        }
+
+        logger.info(f"Bayes factor: BF={bayes_factor:.4f}, evidence={evidence}")
+        return result

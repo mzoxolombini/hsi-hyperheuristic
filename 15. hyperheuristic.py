@@ -5,6 +5,7 @@ Execution Order: 29
 
 import torch
 import numpy as np
+from scipy import stats
 from typing import Dict, List, Tuple, Optional, Any, Union
 import logging
 from pathlib import Path
@@ -364,23 +365,27 @@ class HyperHeuristicFramework:
             "mean_scores": {},
             "std_scores": {}
         }
-        
-        for run in range(n_runs):
-            logger.info(f"Cross-validation run {run + 1}/{n_runs}")
-            
-            # Set different seed for each run
-            self.config.framework.random_seed = 42 + run
-            self.repro_manager._set_global_seeds()
-            
-            # Train and evaluate
-            self.train(dataset_name, mode="full")
-            eval_results = self.evaluate(dataset_name, mode="quick")
-            
-            cv_results["runs"].append({
-                "run": run,
-                "seed": self.config.framework.random_seed,
-                "evaluation": eval_results
-            })
+        original_seed = self.config.framework.random_seed
+
+        try:
+            for run in range(n_runs):
+                logger.info(f"Cross-validation run {run + 1}/{n_runs}")
+                
+                # Set different seed for each run
+                self.config.framework.random_seed = original_seed + run
+                self.repro_manager._set_global_seeds()
+                
+                # Train and evaluate
+                self.train(dataset_name, mode="full")
+                eval_results = self.evaluate(dataset_name, mode="quick")
+                
+                cv_results["runs"].append({
+                    "run": run,
+                    "seed": self.config.framework.random_seed,
+                    "evaluation": eval_results
+                })
+        finally:
+            self.config.framework.random_seed = original_seed
         
         # Calculate statistics
         all_mious = []

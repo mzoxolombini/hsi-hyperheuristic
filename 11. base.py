@@ -198,7 +198,8 @@ class LLHRegistry:
         try:
             instance = llh_class(name, {})
             return instance.get_parameters()
-        except:
+        except Exception as e:
+            logger.warning(f"Could not instantiate {llh_class} for config template: {e}")
             return {}
 
 

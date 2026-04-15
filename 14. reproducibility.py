@@ -82,7 +82,9 @@ class ReproducibilityManager:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
         
-        # Environment variable
+        # NOTE: PYTHONHASHSEED must be set before the interpreter starts.
+        # Setting it here has no effect on the current process.
+        # Ensure the Docker entrypoint or shell script sets: export PYTHONHASHSEED=42
         os.environ['PYTHONHASHSEED'] = str(seed)
         
         logger.info(f"Global seeds set to: {seed}")

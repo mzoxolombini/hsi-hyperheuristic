@@ -214,7 +214,11 @@ class MultiObjectiveEvaluator:
         h, w, b = data.shape
         reshaped = data.reshape(-1, b)
         
-        ica = FastICA(n_components=n_components, max_iter=100, random_state=42)
+        ica = FastICA(
+            n_components=n_components,
+            max_iter=100,
+            random_state=self.config.get('random_seed', 42)
+        )
         result = ica.fit_transform(reshaped).reshape(h, w, n_components)
         
         return result
@@ -365,8 +369,12 @@ class MultiObjectiveEvaluator:
         h, w, b = data.shape
         
         # Spectral clustering is memory intensive
-        if h * w > 5000:
-            logger.warning("Image too large for spectral clustering. Using K-means.")
+        MAX_SPECTRAL_PIXELS = 10000
+        if h * w > MAX_SPECTRAL_PIXELS:
+            logger.info(
+                f"Image size {h*w} exceeds spectral clustering limit "
+                f"{MAX_SPECTRAL_PIXELS}. Using K-means."
+            )
             return self._execute_kmeans(data, {'n_clusters': n_clusters})
         
         reshaped = data.reshape(-1, b)
@@ -446,7 +454,7 @@ class MultiObjectiveEvaluator:
         weight = params.get('spatial_weight', 1.0)
         
         if data.ndim == 3:
-            data_2d = data[:, :, 0]
+            data_2d = data.mean(axis=2)
         else:
             data_2d = data
         
@@ -454,7 +462,7 @@ class MultiObjectiveEvaluator:
         return refined
     
     def _execute_cnn_refine(self, data: np.ndarray, params: Dict[str, Any]) -> np.ndarray:
-        """Execute CNN refinement"""
+        """Execute CNN refinement (placeholder; not used by active grammar rules)."""
         # Simplified CNN refinement (placeholder)
         # In production, implement proper U-Net
         return data
@@ -482,7 +490,7 @@ class MultiObjectiveEvaluator:
         return result
     
     def _execute_crf(self, data: np.ndarray, params: Dict[str, Any]) -> np.ndarray:
-        """Execute CRF refinement"""
+        """Execute CRF refinement (placeholder; not used by active grammar rules)."""
         # Simplified CRF (placeholder)
         # In production, implement dense CRF
         return data
